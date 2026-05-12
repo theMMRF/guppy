@@ -3,8 +3,11 @@ FROM quay.io/cdis/nodejs-base
 COPY . /guppy/
 WORKDIR /guppy
 
-RUN COMMIT=`git rev-parse HEAD` && echo "export const gitCommit = \"${COMMIT}\";" >src/server/version.js
-RUN VERSION=`git describe --always --tags` && echo "export const gitVersion =\"${VERSION}\";" >>src/server/version.js
+ARG GIT_COMMIT=unknown
+ARG GIT_VERSION=unknown
+
+RUN echo "export const gitCommit = \"${GIT_COMMIT}\";" > src/server/version.js
+RUN echo "export const gitVersion = \"${GIT_VERSION}\";" >> src/server/version.js
 RUN /bin/rm -rf .git
 RUN /bin/rm -rf node_modules
 
