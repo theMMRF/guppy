@@ -12,6 +12,7 @@ import {
   fromFieldsToSource, buildNestedField, processNestedFieldNames,
 } from '../utils/utils';
 import { ElasticsearchFieldIndexer } from './fieldResolver';
+import { QueryCache } from './queryCache';
 
 function processArrayConfig(arrayConfig, fieldTypes) {
   const arrayFields = {};
@@ -50,6 +51,11 @@ function processArrayConfig(arrayConfig, fieldTypes) {
 class ES {
   constructor(esConfig = config.esConfig) {
     this.config = esConfig;
+    this.queryCache = new QueryCache({
+      ttlMs: config.esQueryCache.ttlSeconds * 1000,
+      maxSize: config.esQueryCache.maxSize,
+      logger: log,
+    });
     this.client = new Client({
       node: this.config.host,
       requestTimeout: config.esConfig.requestTimeout || 60000,
@@ -93,14 +99,18 @@ class ES {
     // validatedQueryBody.track_total_hits = true;
 
     const start = Date.now();
-    return this.client.search({
+    return this.queryCache.run({
+      esIndex,
+      esType,
+      queryBody: validatedQueryBody,
+    }, () => this.client.search({
       index: esIndex,
       body: validatedQueryBody,
       request_cache: true,
     }).then((resp) => resp.body, (err) => {
       log.error(`[ES.query] error during querying: ${err.message}`);
       throw new Error(err.message);
-    }).finally(() => {
+    })).finally(() => {
       const end = Date.now();
       const durationInMS = end - start;
 
