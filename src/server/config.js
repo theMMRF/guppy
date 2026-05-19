@@ -12,6 +12,16 @@ if (process.env.GUPPY_CONFIG_FILEPATH) {
   );
 }
 
+const configNumber = (envValue, inputValue, defaultValue) => {
+  if (typeof envValue !== 'undefined') {
+    return Number(envValue);
+  }
+  if (typeof inputValue !== 'undefined') {
+    return Number(inputValue);
+  }
+  return defaultValue;
+};
+
 const config = {
   esConfig: {
     host: 'localhost:9200',
@@ -38,6 +48,18 @@ const config = {
     useNamespace: inputConfig.useNamespace || true,
     maxRetries: inputConfig.maxRetries || 3,
     esTimeout: inputConfig.esTimeout || 60000,
+  },
+  esQueryCache: {
+    ttlSeconds: configNumber(
+      process.env.ES_QUERY_CACHE_TTL_SECONDS,
+      inputConfig.es_query_cache_ttl_seconds,
+      60,
+    ),
+    maxSize: configNumber(
+      process.env.ES_QUERY_CACHE_MAX_SIZE,
+      inputConfig.es_query_cache_max_size,
+      256,
+    ),
   },
   port: 80,
   path: '/graphql',

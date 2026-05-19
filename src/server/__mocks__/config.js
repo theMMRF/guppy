@@ -16,6 +16,10 @@ const config = {
     aggregationIncludeMissingData: true,
     missingDataAlias: 'no data',
   },
+  esQueryCache: {
+    ttlSeconds: 60,
+    maxSize: 256,
+  },
 
   port: 3000,
   path: '/graphql',
