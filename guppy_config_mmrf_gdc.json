@@ -109,6 +109,7 @@
         "follow_ups.other_clinical_attributes.comorbidities",
         "follow_ups.other_clinical_attributes.risk_factors",
         "gene",
+        "outcomes",
         "portion_ids",
         "project.disease_type",
         "project.primary_site",
