@@ -421,6 +421,13 @@ const getFilterObj = (
     }
   } else {
     const field = Object.keys(graphqlFilterObj[topLevelOp])[0];
+    // Collection-wide authorization has no inaccessible records. _id is an
+    // Elasticsearch metadata field, so this empty set needs no mapped ACL field.
+    if (topLevelOpLowerCase === 'in' && field === '_id'
+      && Array.isArray(graphqlFilterObj[topLevelOp][field])
+      && graphqlFilterObj[topLevelOp][field].length === 0) {
+      return { match_none: {} };
+    }
     if ((aggsField === field || field.includes(aggsField)) && !filterSelf) {
       // if `filterSelf` flag is false, should not filter the target field itself,
       // instead, only apply an auth filter if exists

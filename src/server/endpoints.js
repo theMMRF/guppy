@@ -3,8 +3,8 @@ import { gitVersion, gitCommit } from './version';
 
 export const statusRouter = async (req, res, next) => {
   try {
-    const data = await esInstance.getAllESIndices();
-    res.send(data);
+    await esInstance.getAllESIndices();
+    res.send({ status: 'OK' });
   } catch (err) {
     next(err);
   }
