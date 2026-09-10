@@ -105,7 +105,7 @@ const startServer = async () => {
           const status = err instanceof CodedError ? err.code : 503;
           throw new GraphQLError('Metadata authorization failed', {
             extensions: {
-              code: status === 401 ? 'UNAUTHENTICATED' : 'FORBIDDEN',
+              code: { 401: 'UNAUTHENTICATED', 403: 'FORBIDDEN', 503: 'SERVICE_UNAVAILABLE' }[status],
               http: { status },
             },
           });

@@ -65,6 +65,7 @@ const config = {
   path: '/graphql',
   arboristEndpoint: 'http://arborist-service',
   tierAccessLevel: 'private',
+  // This dedicated MMRF image must not silently revert to row ACL mode.
   metadataAuthResource: process.env.METADATA_AUTH_RESOURCE || '/mmrf_metadata',
   tierAccessLimit: 1000,
 
