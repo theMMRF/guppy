@@ -1,4 +1,5 @@
 import express from 'express';
+import { GraphQLError } from 'graphql';
 import cors from 'cors';
 import helmet from 'helmet';
 import depthLimit from 'graphql-depth-limit';
@@ -51,6 +52,10 @@ let server;
 const app = express();
 app.use(cors());
 app.use(helmet());
+app.use(['/graphql', '/download'], (req, res, next) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  next();
+});
 app.use(bodyParser.json({ limit: '50mb' }));
 
 const startServer = async () => {
@@ -93,10 +98,18 @@ const startServer = async () => {
     expressMiddleware(server, {
       context: async ({ req }) => {
         const jwt = headerParser.parseJWT(req);
-        const authHelper = await getAuthHelperInstance(jwt);
-        return {
-          authHelper,
-        };
+        try {
+          const authHelper = await getAuthHelperInstance(jwt);
+          return { authHelper };
+        } catch (err) {
+          const status = err instanceof CodedError ? err.code : 503;
+          throw new GraphQLError('Metadata authorization failed', {
+            extensions: {
+              code: { 401: 'UNAUTHENTICATED', 403: 'FORBIDDEN', 503: 'SERVICE_UNAVAILABLE' }[status],
+              http: { status },
+            },
+          });
+        }
       },
       // bind graphql server to express app at config.path
       path: config.path,

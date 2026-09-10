@@ -65,6 +65,8 @@ const config = {
   path: '/graphql',
   arboristEndpoint: 'http://arborist-service',
   tierAccessLevel: 'private',
+  // This dedicated MMRF image must not silently revert to row ACL mode.
+  metadataAuthResource: process.env.METADATA_AUTH_RESOURCE || '/mmrf_metadata',
   tierAccessLimit: 1000,
 
   tierAccessSensitiveRecordExclusionField:
@@ -175,3 +177,8 @@ log.info(
 );
 
 export default config;
+
+if (config.metadataAuthResource && (config.tierAccessLevel !== 'private'
+  || config.arboristEndpoint === 'mock' || config.internalLocalTest)) {
+  throw new Error('METADATA_AUTH_RESOURCE requires private access and real Arborist authorization');
+}

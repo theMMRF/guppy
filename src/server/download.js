@@ -11,13 +11,12 @@ const downloadRouter = async (req, res, next) => {
   } = req.body;
 
   log.debug('[download] ', JSON.stringify(req.body, null, 4));
-  const esIndexConfig = esInstance.getESIndexConfigByType(type);
-  const tierAccessLevel = (config.tierAccessLevel
-    ? config.tierAccessLevel : esIndexConfig.tier_access_level);
-  const jwt = headerParser.parseJWT(req);
-  const authHelper = await getAuthHelperInstance(jwt);
-
   try {
+    const jwt = headerParser.parseJWT(req);
+    const authHelper = await getAuthHelperInstance(jwt);
+    const esIndexConfig = esInstance.getESIndexConfigByType(type);
+    const tierAccessLevel = (config.tierAccessLevel
+      ? config.tierAccessLevel : esIndexConfig.tier_access_level);
     let appliedFilter;
     /**
      * Tier access strategy for download endpoint:
