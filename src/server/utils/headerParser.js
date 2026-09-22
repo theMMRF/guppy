@@ -9,6 +9,13 @@ const parseJWT = (req) => {
       }
     }
   }
+  if (authHeader == null) {
+    const cookie = (req.headers.cookie || '').split(';')
+      .map((part) => part.trim()).find((part) => part.startsWith('access_token='));
+    if (cookie) {
+      try { jwt = decodeURIComponent(cookie.slice('access_token='.length)); } catch (err) { return null; }
+    }
+  }
   return jwt;
 };
 

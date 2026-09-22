@@ -11,7 +11,6 @@ class ArboristClient {
   listAuthMapping(jwt) {
     // Make request to arborist for list of resources with access
     const resourcesEndpoint = `${this.baseEndpoint}/auth/mapping`;
-    log.debug('[ArboristClient] listAuthMapping jwt: ', jwt);
 
     const headers = (jwt) ? { Authorization: `bearer ${jwt}` } : {};
     return fetch(

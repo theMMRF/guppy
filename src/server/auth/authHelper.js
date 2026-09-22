@@ -8,6 +8,7 @@ import {
   checkIfUserCanRefreshServer,
 } from './utils';
 import config from '../config';
+import requireMetadataAccess from './metadataAccess';
 
 export class AuthHelper {
   constructor(jwt) {
@@ -15,6 +16,14 @@ export class AuthHelper {
   }
 
   async initialize() {
+    if (config.metadataAuthResource) {
+      await requireMetadataAccess(this._jwt);
+      this._metadataAuthorized = true;
+      this._accessibleResourceList = [config.metadataAuthResource];
+      this._unaccessibleResourceList = [];
+      this._canRefresh = false; // use a rolling restart in collection-wide mode
+      return;
+    }
     try {
       const [accessibleResourceList, arboristResources] = await getAccessibleResourcesFromArboristasync(this._jwt);
       this._accessibleResourceList = accessibleResourceList;
@@ -67,12 +76,16 @@ export class AuthHelper {
   }
 
   applyAccessibleFilter(filter) {
+    if (config.metadataAuthResource && this._metadataAuthorized === true) return filter;
     const accessiblePart = buildFilterWithResourceList(this._accessibleResourceList);
     const appliedFilter = addTwoFilters(filter, accessiblePart);
     return appliedFilter;
   }
 
   applyUnaccessibleFilter(filter) {
+    if (config.metadataAuthResource && this._metadataAuthorized === true) {
+      return { IN: { _id: [] } };
+    }
     const unaccessiblePart = buildFilterWithResourceList(this._unaccessibleResourceList);
     const appliedFilter = addTwoFilters(filter, unaccessiblePart);
     return appliedFilter;
