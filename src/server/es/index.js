@@ -1,6 +1,7 @@
 import { Client } from '@elastic/elasticsearch';
 import _ from 'lodash';
 import { GraphQLError } from 'graphql';
+import { applyFileVisibility } from '../auth/fileVisibility';
 import config from '../config';
 import getFilterObj from './filter';
 import getESSortBody from './sort';
@@ -79,7 +80,7 @@ class ES {
    * @param {object} queryBody
    */
   async query(esIndex, esType, queryBody) {
-    const validatedQueryBody = {};
+    let validatedQueryBody = {};
     Object.keys(queryBody).forEach((key) => {
       if (typeof queryBody[key] !== 'undefined' && queryBody[key] !== null) {
         validatedQueryBody[key] = queryBody[key];
@@ -98,6 +99,7 @@ class ES {
     // };
     // validatedQueryBody.track_total_hits = true;
 
+    validatedQueryBody = applyFileVisibility(validatedQueryBody);
     const start = Date.now();
     return this.queryCache.run({
       esIndex,
@@ -149,7 +151,7 @@ class ES {
         `Invalid fields: "${fieldsNotBelong.join('", "')}"`,
       );
     }
-    const validatedQueryBody = filter ? { query: filter } : {};
+    const validatedQueryBody = applyFileVisibility(filter ? { query: filter } : {});
     log.debug('[ES.scrollQuery] scroll query body: ', JSON.stringify(validatedQueryBody, null, 4));
 
     let currentBatch;

@@ -1,0 +1,31 @@
+name: Selective visibility
+on:
+  pull_request:
+  push:
+    branches: [feature/selective-file-visibility, feature/selective-file-visibility-13.1]
+permissions:
+  contents: read
+jobs:
+  verification:
+    runs-on: ubuntu-latest
+    services:
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:7.17.29
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: 'false'
+          ES_JAVA_OPTS: '-Xms512m -Xmx512m'
+        ports: ['9200:9200']
+        options: >-
+          --health-cmd "curl -fsS http://localhost:9200/_cluster/health"
+          --health-interval 10s --health-timeout 5s --health-retries 12
+    env:
+      VISIBILITY_TEST_ES_URL: http://localhost:9200
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --runInBand src/server/auth/__tests__/fileVisibility.test.js src/server/auth/__tests__/fileVisibility.integration.test.js src/server/auth/__tests__/metadataAccess.test.js
