@@ -56,7 +56,6 @@ test.each([
   expect(() => applyFileVisibility(body)).toThrow();
 });
 
-
 test.each([
   { aggs: {}, aggregations: { leaked: { global: {} } } },
   { aggs: { outer: { aggregations: { leaked: { global: {} } }, aggs: {} } } },
@@ -66,11 +65,10 @@ test.each([
   expect(() => applyFileVisibility(body)).toThrow();
 });
 
-
-test.each([0, '0', 0.5, '0.5', false, null, [], 'invalid'])('rejects unsafe term count %j in either nested alias', (value) => {
+test.each([0, '0', 0.5, '0.5', '0.99999999999999999', '9.9999999999999999e-1', '.99999999999999999', false, null, [], 'invalid'])('rejects unsafe term count %j in either nested alias', (value) => {
   expect(() => applyFileVisibility({ aggs: {}, aggregations: { outer: { aggs: { ids: { terms: { field: 'file_id', min_doc_count: value } } } } } })).toThrow();
 });
 
-test.each([1, '1', 1.5])('preserves safe positive term count %j', (value) => {
+test.each([1, '1', 1.5, '1.00000000000000001', '.1e1', '1.5'])('preserves safe positive term count %j', (value) => {
   expect(() => applyFileVisibility({ aggs: { ids: { terms: { field: 'file_id', min_doc_count: value } } } })).not.toThrow();
 });

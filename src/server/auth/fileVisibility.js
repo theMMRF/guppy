@@ -46,11 +46,23 @@ export const visibilityQuery = (resources = []) => {
 
 // ES coerces fractional values to long and accepts string numbers. Values below
 // one can expose unfiltered dictionary terms as zero-count buckets.
+// Compare a decimal string's first nonzero digit position without float rounding.
+const decimalStringAtLeastOne = (value) => {
+  const match = /^\+?(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?$/.exec(value.trim());
+  if (!match) return false;
+  const integer = match[1] || '';
+  const digits = `${integer}${match[2] || match[3] || ''}`;
+  const first = digits.search(/[1-9]/);
+  const exponent = Number(match[4] || 0);
+  return first >= 0 && Number.isSafeInteger(exponent) && integer.length - first + exponent > 0;
+};
+
 const unsafeTermsCount = (aggregation) => {
-  const terms = aggregation.terms;
+  const { terms } = aggregation;
   if (!terms || !Object.prototype.hasOwnProperty.call(terms, 'min_doc_count')) return false;
   const value = terms.min_doc_count;
-  return !['number', 'string'].includes(typeof value) || !Number.isFinite(Number(value)) || Number(value) < 1;
+  return !['number', 'string'].includes(typeof value) || !Number.isFinite(Number(value)) || Number(value) < 1
+    || (typeof value === 'string' && !decimalStringAtLeastOne(value));
 };
 
 const hasGlobalAggregation = (aggregations) => Object.values(aggregations || {}).some(
