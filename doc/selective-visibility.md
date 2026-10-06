@@ -7,7 +7,7 @@ must have `_gen3_visibility: public` or `_gen3_visibility: restricted`; **unmark
 or unknown documents are hidden**. The restricted form must include a nonempty
 keyword array `_gen3_visibility_authz` of canonical Arborist resources.
 
-The caller needs `fence/read-storage` on every resource, in addition to normal
+The caller needs `indexd/read-metadata` on every resource, in addition to normal
 metadata access. The same Arborist mapping handles group grants and wildcard
 actions. Request-scoped AsyncLocalStorage prevents permissions crossing users.
 Filtering wraps the ES query before projection, facets, pagination, scroll
@@ -35,3 +35,18 @@ Run `npm test -- --runInBand src/server/auth/__tests__/fileVisibility.test.js`
 and existing `metadataAccess.test.js`. Set `VISIBILITY_TEST_ES_URL` to a disposable
 ES 7 cluster to run `fileVisibility.integration.test.js`, covering hits, facets,
 scroll exports, all-resource grants and concurrent cache separation.
+
+Discovery permissions are independent of storage permissions on the same dataset
+resource tree. Existing public metadata remains available under the existing
+commons metadata policy. With the feature disabled (the default), queries and
+unmarked legacy documents retain their existing behavior. When enabled, assign
+`indexd/read-metadata` to the groups that may discover a restricted dataset,
+and separately assign `fence/read-storage` to those that may download it.
+
+The all-resource subset check uses a Painless hash map, preserving more than
+1,024 allowed resources without a Lucene clause for each permission. The cluster
+must permit script queries (`search.allow_expensive_queries`, enabled by default).
+Both `aggs` and `aggregations`, including nested aliases, are checked. Global and
+significant aggregations, zero-count terms buckets, suggestions, and policy field
+runtime overrides are rejected while filtering is enabled. Ordinary facets cannot
+return restricted identifiers as zero-count buckets.

@@ -5,15 +5,15 @@ import CodedError from '../utils/error';
 // Permissions and query cache keys belong to a request, never to the ES singleton.
 export const visibilityContext = new AsyncLocalStorage();
 
-export const downloadableResources = (mapping) => {
+export const visibilityResources = (mapping) => {
   if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) {
     throw new CodedError(503, 'Invalid authorization mapping');
   }
   return Object.keys(mapping).filter((resource) => {
     const actions = mapping[resource];
     if (!Array.isArray(actions)) throw new CodedError(503, 'Invalid authorization mapping');
-    return actions.some((action) => action && typeof action === 'object' && ['fence', '*'].includes(action.service)
-      && ['read-storage', '*'].includes(action.method));
+    return actions.some((action) => action && typeof action === 'object' && ['indexd', '*'].includes(action.service)
+      && ['read-metadata', '*'].includes(action.method));
   }).sort();
 };
 
@@ -30,13 +30,10 @@ export const visibilityQuery = (resources = []) => {
           { term: { [visibility]: 'restricted' } },
           { exists: { field: authz } },
           {
-            terms_set: {
-              [authz]: {
-                terms: [...new Set(resources)].sort(),
-                minimum_should_match_script: {
-                  source: 'doc[params.field].size()',
-                  params: { field: authz },
-                },
+            script: {
+              script: {
+                source: 'def required = doc[params.field]; if (required.size() == 0) return false; for (def resource : required) { if (!params.allowed.containsKey(resource)) return false; } return true;',
+                params: { field: authz, allowed: Object.fromEntries([...new Set(resources)].sort().map((resource) => [resource, true])) },
               },
             },
           },
@@ -49,7 +46,8 @@ export const visibilityQuery = (resources = []) => {
 
 const hasGlobalAggregation = (aggregations) => Object.values(aggregations || {}).some(
   (aggregation) => ['global', 'significant_terms', 'significant_text'].some((key) => Object.prototype.hasOwnProperty.call(aggregation, key))
-    || hasGlobalAggregation(aggregation.aggs || aggregation.aggregations),
+    || (aggregation.terms && aggregation.terms.min_doc_count === 0)
+    || hasGlobalAggregation(aggregation.aggs) || hasGlobalAggregation(aggregation.aggregations),
 );
 
 export const applyFileVisibility = (body) => {
@@ -57,7 +55,7 @@ export const applyFileVisibility = (body) => {
   if (body.suggest || ['_gen3_visibility', '_gen3_visibility_authz'].some((field) => Object.prototype.hasOwnProperty.call(body.runtime_mappings || {}, field))) {
     throw new CodedError(400, 'Query cannot override or bypass file visibility');
   }
-  if (hasGlobalAggregation(body.aggs || body.aggregations)) {
+  if (hasGlobalAggregation(body.aggs) || hasGlobalAggregation(body.aggregations)) {
     throw new CodedError(400, 'Aggregations cannot bypass file visibility');
   }
   const scope = visibilityContext.getStore();

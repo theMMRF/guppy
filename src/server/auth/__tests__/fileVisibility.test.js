@@ -1,25 +1,26 @@
-import { applyFileVisibility, downloadableResources, visibilityContext } from '../fileVisibility';
+import { applyFileVisibility, visibilityResources, visibilityContext } from '../fileVisibility';
 import config from '../../config';
 
 const resource = '/programs/MMRF/projects/private';
 beforeEach(() => { config.fileVisibilityEnabled = true; });
 afterEach(() => { config.fileVisibilityEnabled = false; });
 
-test('uses exact fence download actions including wildcards', () => {
-  expect(downloadableResources({
-    [resource]: [{ service: 'fence', method: 'read-storage' }],
+test('uses independent IndexD metadata actions including wildcards', () => {
+  expect(visibilityResources({
+    [resource]: [{ service: 'indexd', method: 'read-metadata' }],
+    download: [{ service: 'fence', method: 'read-storage' }],
     metadata: [{ service: 'guppy', method: 'read' }],
     wrong: [{ service: 'fence', method: 'not-read-storage' }],
     wildcard: [{ service: '*', method: '*' }],
   })).toEqual([resource, 'wildcard']);
-  expect(() => downloadableResources({ error: {} })).toThrow();
+  expect(() => visibilityResources({ error: {} })).toThrow();
 });
 
 test('policy wraps query before cache, projections and aggregation', () => {
   const body = { query: { term: { file_id: 'secret' } }, _source: ['file_name'], aggs: { total: { value_count: { field: 'file_id' } } } };
   const result = visibilityContext.run({ resources: [resource] }, () => applyFileVisibility(body));
   expect(result.query.bool.filter[0]).toEqual(body.query);
-  expect(result.query.bool.filter[1].bool.should[1].bool.filter[2].terms_set._gen3_visibility_authz.terms).toEqual([resource]);
+  expect(result.query.bool.filter[1].bool.should[1].bool.filter[2].script.script.params.allowed).toEqual({ [resource]: true });
   expect(body.query).toEqual({ term: { file_id: 'secret' } });
   expect(result.aggs).toEqual(body.aggs);
 });
@@ -52,5 +53,15 @@ test.each([
   { runtime_mappings: { _gen3_visibility: { type: 'keyword', script: "emit('public')" } } },
   { aggs: { names: { significant_terms: { field: 'file_name' } } } },
 ])('rejects query features with unfiltered background data', (body) => {
+  expect(() => applyFileVisibility(body)).toThrow();
+});
+
+
+test.each([
+  { aggs: {}, aggregations: { leaked: { global: {} } } },
+  { aggs: { outer: { aggregations: { leaked: { global: {} } }, aggs: {} } } },
+  { aggs: { identifiers: { terms: { field: 'file_id', min_doc_count: 0 } } } },
+  { aggs: { outer: { aggs: { identifiers: { terms: { field: 'file_id', min_doc_count: 0 } } } } } },
+])('rejects both aggregation aliases and zero-count term buckets', (body) => {
   expect(() => applyFileVisibility(body)).toThrow();
 });

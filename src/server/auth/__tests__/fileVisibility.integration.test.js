@@ -69,4 +69,14 @@ integration('file visibility on Elasticsearch 7', () => {
     ]);
     expect(responses.map((response) => response.hits.total.value)).toEqual([3, 1]);
   });
+  test('large permission maps and facets never reveal hidden identifiers', async () => {
+    const resources = Array.from({ length: 1100 }, (_, i) => `/large/${i}`).concat(a);
+    await visibilityContext.run({ resources }, async () => {
+      const result = await es.query(index, 'files', { aggs: { ids: { terms: { field: 'file_id' } } } });
+      expect(result.hits.hits.map((hit) => hit._source.file_id).sort()).toEqual(['private-a', 'public']);
+      expect(result.aggregations.ids.buckets.map((bucket) => bucket.key).sort()).toEqual(['private-a', 'public']);
+      await expect(es.query(index, 'files', { aggs: { ids: { terms: { field: 'file_id', min_doc_count: 0 } } } })).rejects.toThrow();
+    });
+  });
+
 });
