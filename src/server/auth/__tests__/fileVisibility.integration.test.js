@@ -75,7 +75,9 @@ integration('file visibility on Elasticsearch 7', () => {
       const result = await es.query(index, 'files', { aggs: { ids: { terms: { field: 'file_id' } } } });
       expect(result.hits.hits.map((hit) => hit._source.file_id).sort()).toEqual(['private-a', 'public']);
       expect(result.aggregations.ids.buckets.map((bucket) => bucket.key).sort()).toEqual(['private-a', 'public']);
-      await expect(es.query(index, 'files', { aggs: { ids: { terms: { field: 'file_id', min_doc_count: 0 } } } })).rejects.toThrow();
+      for (const value of [0, '0', 0.5]) {
+        await expect(es.query(index, 'files', { aggs: { ids: { terms: { field: 'file_id', min_doc_count: value } } } })).rejects.toThrow();
+      }
     });
   });
 

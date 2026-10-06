@@ -65,3 +65,12 @@ test.each([
 ])('rejects both aggregation aliases and zero-count term buckets', (body) => {
   expect(() => applyFileVisibility(body)).toThrow();
 });
+
+
+test.each([0, '0', 0.5, '0.5', false, null, [], 'invalid'])('rejects unsafe term count %j in either nested alias', (value) => {
+  expect(() => applyFileVisibility({ aggs: {}, aggregations: { outer: { aggs: { ids: { terms: { field: 'file_id', min_doc_count: value } } } } } })).toThrow();
+});
+
+test.each([1, '1', 1.5])('preserves safe positive term count %j', (value) => {
+  expect(() => applyFileVisibility({ aggs: { ids: { terms: { field: 'file_id', min_doc_count: value } } } })).not.toThrow();
+});

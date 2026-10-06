@@ -44,9 +44,18 @@ export const visibilityQuery = (resources = []) => {
   return { bool: { should: allowed, minimum_should_match: 1 } };
 };
 
+// ES coerces fractional values to long and accepts string numbers. Values below
+// one can expose unfiltered dictionary terms as zero-count buckets.
+const unsafeTermsCount = (aggregation) => {
+  const terms = aggregation.terms;
+  if (!terms || !Object.prototype.hasOwnProperty.call(terms, 'min_doc_count')) return false;
+  const value = terms.min_doc_count;
+  return !['number', 'string'].includes(typeof value) || !Number.isFinite(Number(value)) || Number(value) < 1;
+};
+
 const hasGlobalAggregation = (aggregations) => Object.values(aggregations || {}).some(
   (aggregation) => ['global', 'significant_terms', 'significant_text'].some((key) => Object.prototype.hasOwnProperty.call(aggregation, key))
-    || (aggregation.terms && aggregation.terms.min_doc_count === 0)
+    || unsafeTermsCount(aggregation)
     || hasGlobalAggregation(aggregation.aggs) || hasGlobalAggregation(aggregation.aggregations),
 );
 
