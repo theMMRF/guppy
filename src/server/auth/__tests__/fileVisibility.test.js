@@ -119,3 +119,9 @@ test('ownership mapping rejects parent copy_to and object arrays', () => {
   expect(() => protectedFilePaths(new ElasticsearchFieldIndexer({ _gen3_file_visibility_version: { type: 'integer' }, _gen3_file_authz: { type: 'keyword' }, files: { type: 'object', properties: { _gen3_file_authz: { type: 'keyword' } } } }))).toThrow();
   expect(() => protectedFilePaths(new ElasticsearchFieldIndexer({ _gen3_file_visibility_version: { type: 'integer' }, _gen3_file_authz: { type: 'keyword' }, files: { type: 'nested', properties: { file_name: { type: 'text', copy_to: 'all_text' }, _gen3_file_authz: { type: 'keyword' } } } }))).toThrow();
 });
+
+
+test('aggregation order arrays cannot rank buckets by private nested counts', () => {
+  expect(() => applyFileVisibility({ aggs: { cases: { terms: { field: 'case_id', order: [{ 'files>_count': 'desc' }] } } } })).toThrow();
+  expect(() => applyFileVisibility({ aggs: { cases: { terms: { field: 'case_id', order: [{ _count: 'desc' }, { _key: 'asc' }] } } } })).not.toThrow();
+});

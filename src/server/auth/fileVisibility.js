@@ -113,7 +113,7 @@ const checkQuery = (value, paths, key = '') => {
       || ((name === 'field' || key === 'sort') && typeof item === 'string' && /(?:^|\.)summary\.(?:file_count|file_size|data_categories|experimental_strategies)(?:\.|$)/.test(item))) {
       throw new CodedError(400, 'Query file summaries through the filtered file index');
     }
-    if (name === 'order' && item && typeof item === 'object' && Object.keys(item).some((field) => !['_key', '_count'].includes(field))) throw new CodedError(400, 'Custom aggregation ordering can expose unfiltered file counts');
+    if (name === 'order' && item && typeof item === 'object' && (Array.isArray(item) ? item : [item]).some((order) => !order || typeof order !== 'object' || Array.isArray(order) || Object.keys(order).some((field) => !['_key', '_count'].includes(field)))) throw new CodedError(400, 'Custom aggregation ordering can expose unfiltered file counts');
     if (name === 'terms' && item && typeof item === 'object' && Object.values(item).some((option) => option && typeof option === 'object' && !Array.isArray(option) && 'index' in option)) throw new CodedError(400, 'Terms lookup cannot bypass project visibility');
     checkQuery(item, paths, name);
   });
