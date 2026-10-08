@@ -1,52 +1,38 @@
-# Selective file visibility
+# Opt-in project file metadata visibility
 
-`FILE_VISIBILITY_ENABLED=true` opts into private discovery, alongside the current
-MMRF metadata authorization. It defaults to false. The Helm chart's additional
-`guppy.env` supports this flag. With the flag enabled, every searchable document
-must have `_gen3_visibility: public` or `_gen3_visibility: restricted`; **unmarked
-or unknown documents are hidden**. The restricted form must include a nonempty
-keyword array `_gen3_visibility_authz` of canonical Arborist resources.
+`PROJECT_VISIBILITY_ENABLED=true` enforces `indexd/read-metadata` grants from
+standard user YAML/Arborist on existing IndexD AuthZ ownership. It defaults to
+false, retaining existing search behavior for commons that do not opt in.
+Fence's `read-storage` grants remain independent.
 
-The caller needs `indexd/read-metadata` on every resource, in addition to normal
-metadata access. The same Arborist mapping handles group grants and wildcard
-actions. Request-scoped AsyncLocalStorage prevents permissions crossing users.
-Filtering wraps the ES query before projection, facets, pagination, scroll
-exports, and query caching. Cache keys include the effective resources. A global
-aggregation is rejected because Elasticsearch would otherwise ignore the query.
-No field projection can remove the policy before it is applied.
+Before enabling, prepare **every** served search projection with
+`_gen3_file_visibility_version: 1` and canonical `_gen3_file_authz` ownership from
+IndexD. Ownership belongs on files and their references, not on public clinical
+cases merely because they contain private files. Owned embedded objects require
+nested mappings, keyword ownership with doc values, and no parent `copy_to` or
+`include_in_parent`/`include_in_root` copies. Search rejects unsafe mappings.
 
-Prepare *all* file, case, gene, mutation, CNV and project projections before
-turning on this flag. A parent containing restricted children must require the
-union of their resources; parent redaction is deliberately conservative. Use
-MMRF's `prepare-file-visibility.py --resource /private-project` for an entire
-private dataset, including projections which do not contain file GUIDs. A full
-IndexD manifest can also mark mixed documents containing private references.
-Do not label derived private metadata public just because it lacks a GUID.
+Query, count, facet, export and pagination filters run before Elasticsearch
+results are counted. Nested file queries/facets/sorts enforce each child's own
+resources. Global facets receive a visibility filter too. Source responses fetch
+ownership before projection, remove unauthorized files, strip internal fields,
+and recompute file summaries from unindexed `_gen3_file_summary` contribution
+groups. Public case details and visible files remain available. Grants require
+all listed owners, including referenced private input/index files.
 
-Search markers are an ingestion contract, not an automatic IndexD-to-ES sync.
-When restricting previously public data, remove its old public search copies
-from served aliases/caches first, rebuild all derivatives with restrictions,
-and atomically publish the prepared indices. Reindex jobs must always run the
-preparation step; unprepared documents remain hidden with the feature enabled.
-Do not disable the feature or restore old public indices while private data is
-present. See the coordinated MMRF GitOps runbook and readiness validator.
+Queries, sorts and aggregations over old stored `summary.file_count`, `file_size`,
+`data_categories` and `experimental_strategies` are rejected because their stored
+values contain unfiltered totals; use the filtered file index for these queries.
+Their source-response values are recalculated. User scripts, background-statistic
+aggregations and zero-count terms that can bypass filtering are rejected.
 
-Run `npm test -- --runInBand src/server/auth/__tests__/fileVisibility.test.js`
-and existing `metadataAccess.test.js`. Set `VISIBILITY_TEST_ES_URL` to a disposable
-ES 7 cluster to run `fileVisibility.integration.test.js`, covering hits, facets,
-scroll exports, all-resource grants and concurrent cache separation.
+Changing user/group visibility requires ordinary usersync, without modifying
+IndexD records or reindexing. Changing a file's ownership or ingesting/rebuilding
+projections requires synchronized ownership preparation. Queries resolve and pin
+validated physical indices to avoid alias-switch races; this adds a mapping read
+per request and should be measured during dev acceptance.
 
-Discovery permissions are independent of storage permissions on the same dataset
-resource tree. Existing public metadata remains available under the existing
-commons metadata policy. With the feature disabled (the default), queries and
-unmarked legacy documents retain their existing behavior. When enabled, assign
-`indexd/read-metadata` to the groups that may discover a restricted dataset,
-and separately assign `fence/read-storage` to those that may download it.
-
-The all-resource subset check uses a Painless hash map, preserving more than
-1,024 allowed resources without a Lucene clause for each permission. The cluster
-must permit script queries (`search.allow_expensive_queries`, enabled by default).
-Both `aggs` and `aggregations`, including nested aliases, are checked. Global and
-significant aggregations, zero-count terms buckets, suggestions, and policy field
-runtime overrides are rejected while filtering is enabled. Ordinary facets cannot
-return restricted identifiers as zero-count buckets.
+Peregrine/Sheepdog graph reads, MDS and other stores need coordinated protection
+before claiming hidden files cannot be discovered. Clinical/genomic row permissions
+are otherwise deferred. Do not enable against unprepared indices or treat an
+opt-out rollback as preserving private metadata.

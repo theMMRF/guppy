@@ -61,7 +61,7 @@ const config = {
       256,
     ),
   },
-  fileVisibilityEnabled: process.env.FILE_VISIBILITY_ENABLED === 'true',
+  fileVisibilityEnabled: process.env.PROJECT_VISIBILITY_ENABLED === 'true',
   port: 80,
   path: '/graphql',
   arboristEndpoint: 'http://arborist-service',
