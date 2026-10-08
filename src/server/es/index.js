@@ -1,6 +1,7 @@
 import { Client } from '@elastic/elasticsearch';
 import _ from 'lodash';
 import { GraphQLError } from 'graphql';
+import { applyFileVisibility, redactFileResponse, projectFileSource, projectFileResponse, protectedFilePaths } from '../auth/fileVisibility';
 import config from '../config';
 import getFilterObj from './filter';
 import getESSortBody from './sort';
@@ -79,7 +80,7 @@ class ES {
    * @param {object} queryBody
    */
   async query(esIndex, esType, queryBody) {
-    const validatedQueryBody = {};
+    let validatedQueryBody = {};
     Object.keys(queryBody).forEach((key) => {
       if (typeof queryBody[key] !== 'undefined' && queryBody[key] !== null) {
         validatedQueryBody[key] = queryBody[key];
@@ -98,19 +99,21 @@ class ES {
     // };
     // validatedQueryBody.track_total_hits = true;
 
+    const layout = config.fileVisibilityEnabled ? await this._visibilityLayout(esIndex) : { indices: esIndex, indexer: this.paths?.[esIndex] };
+    validatedQueryBody = applyFileVisibility(validatedQueryBody, layout.indexer);
     const start = Date.now();
     return this.queryCache.run({
-      esIndex,
+      esIndex: layout.indices,
       esType,
       queryBody: validatedQueryBody,
     }, () => this.client.search({
-      index: esIndex,
+      index: layout.indices,
       body: validatedQueryBody,
       request_cache: true,
-    }).then((resp) => resp.body, (err) => {
+    }).then((resp) => redactFileResponse(resp.body), (err) => {
       log.error(`[ES.query] error during querying: ${err.message}`);
       throw new Error(err.message);
-    })).finally(() => {
+    })).then((response) => projectFileResponse(response, queryBody._source)).finally(() => {
       const end = Date.now();
       const durationInMS = end - start;
 
@@ -149,7 +152,8 @@ class ES {
         `Invalid fields: "${fieldsNotBelong.join('", "')}"`,
       );
     }
-    const validatedQueryBody = filter ? { query: filter } : {};
+    const layout = config.fileVisibilityEnabled ? await this._visibilityLayout(esIndex) : { indices: esIndex, indexer: this.paths?.[esIndex] };
+    const validatedQueryBody = applyFileVisibility({ ...(filter ? { query: filter } : {}), ...(config.fileVisibilityEnabled && sort ? { sort } : {}) }, layout.indexer);
     log.debug('[ES.scrollQuery] scroll query body: ', JSON.stringify(validatedQueryBody, null, 4));
 
     let currentBatch;
@@ -165,12 +169,12 @@ class ES {
     while (!currentBatch || batchSize > 0) {
       if (typeof scrollID === 'undefined') { // first batch
         const res = await this.client.search({ // eslint-disable-line no-await-in-loop
-          index: esIndex,
+          index: layout.indices,
           body: validatedQueryBody,
           scroll: '1m',
           size: SCROLL_PAGE_SIZE,
-          _source: fields,
-          sort: sortStringList,
+          _source: config.fileVisibilityEnabled ? true : fields,
+          sort: config.fileVisibilityEnabled ? undefined : sortStringList,
         }).then((resp) => resp, (err) => {
           log.error('[ES.query] error when query', err.message);
           throw new Error(err.message);
@@ -191,7 +195,7 @@ class ES {
       log.debug('[ES scrollQuery] get batch size = ', batchSize, ' merging...');
 
       // TODO: change it to streaming
-      totalData = totalData.concat(currentBatch.hits.hits.map((item) => item._source));
+      totalData = totalData.concat(redactFileResponse(currentBatch).hits.hits.map((item) => (config.fileVisibilityEnabled ? projectFileSource(item._source, fields) : item._source)));
     }
 
     log.debug('[ES scrollQuery] end scrolling');
@@ -208,13 +212,30 @@ class ES {
    * If error, print error stack
    * @param {string} esIndex
    */
+  async _visibilityLayout(esIndex) {
+    const response = await this.client.indices.getMapping({ index: esIndex });
+    const entries = Object.entries(response.body);
+    if (!entries.length || entries.some(([, value]) => JSON.stringify(value.mappings.properties) !== JSON.stringify(entries[0][1].mappings.properties))) {
+      throw new CodedError(503, 'Search alias has inconsistent ownership mappings');
+    }
+    const indexer = new ElasticsearchFieldIndexer(entries[0][1].mappings.properties);
+    protectedFilePaths(indexer);
+    // Pin the query/cache to the physical indices validated above, even if the
+    // alias is concurrently switched to an unprepared replacement.
+    return { indices: entries.map(([name]) => name), indexer };
+  }
+
   async _getESFieldsTypes(esIndex) {
     const errMsg = `[ES.initialize] error getting mapping from ES index "${esIndex}"`;
     return this.client.indices.getMapping({
       index: esIndex,
     }).then((resp) => {
       try {
-        const esIndexAlias = Object.keys(resp.body)[0];
+        const entries = Object.entries(resp.body);
+        if (config.fileVisibilityEnabled && entries.some(([, value]) => JSON.stringify(value.mappings.properties) !== JSON.stringify(entries[0][1].mappings.properties))) {
+          throw new CodedError(503, 'Search alias has inconsistent ownership mappings');
+        }
+        const esIndexAlias = entries[0][0];
         log.info('Mapping response from ES: ', resp.body[esIndexAlias]);
         return resp.body[esIndexAlias].mappings.properties;
       } catch (err) {
@@ -361,6 +382,7 @@ class ES {
   async initialize() {
     this.fieldTypes = await this._getMappingsForAllIndices();
     this.paths = await this._getNestingForAllIndices();
+    if (config.fileVisibilityEnabled) Object.values(this.paths).forEach(protectedFilePaths);
     if (this.config.arrayConfig) {
       this.arrayFields = await this._getArrayFieldsFromConfigObject();
     } else {

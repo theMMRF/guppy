@@ -18,6 +18,7 @@ import log from './logger';
 import middlewares from './middlewares';
 import headerParser from './utils/headerParser';
 import getAuthHelperInstance from './auth/authHelper';
+import { visibilityContext } from './auth/fileVisibility';
 import downloadRouter from './download';
 import CodedError from './utils/error';
 import { prefixForIndex } from './utils/utils';
@@ -54,7 +55,7 @@ app.use(cors());
 app.use(helmet());
 app.use(['/graphql', '/download'], (req, res, next) => {
   res.setHeader('Cache-Control', 'private, no-store');
-  next();
+  visibilityContext.run({ resources: [] }, next);
 });
 app.use(bodyParser.json({ limit: '50mb' }));
 
