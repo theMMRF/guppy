@@ -30,4 +30,4 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: npm test -- --runInBand src/server/__tests__/preparedSchema.test.js src/server/auth/__tests__/fileVisibility.test.js src/server/auth/__tests__/fileVisibility.integration.test.js src/server/auth/__tests__/metadataAccess.test.js
+      - run: npm test -- --runInBand src/server/__tests__/preparedSchema.test.js src/server/__tests__/requestContext.test.js src/server/__tests__/queryPrivacyLogs.test.js src/server/es/__tests__/queryCache.test.js src/server/auth/__tests__/fileVisibility.test.js src/server/auth/__tests__/fileVisibility.integration.test.js src/server/auth/__tests__/metadataAccess.test.js

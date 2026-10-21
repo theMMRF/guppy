@@ -239,10 +239,11 @@ export const projectFileSource = (source, selection) => {
   const filters = typeof selection === 'object' && !Array.isArray(selection) ? selection : { includes: [].concat(selection) };
   const includes = [].concat(filters.includes || filters.include || ['*']);
   const excludes = [].concat(filters.excludes || filters.exclude || []);
-  const matches = (pattern, path) => {
+  const patterns = new Map([...includes, ...excludes].map((pattern) => {
     const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
-    return new RegExp(`^${escaped}(?:\\.|$)`).test(path);
-  };
+    return [pattern, new RegExp(`^${escaped}(?:\\.|$)`)];
+  }));
+  const matches = (pattern, path) => patterns.get(pattern).test(path);
   const visit = (value, path = '', inherited = false) => {
     if (path && excludes.some((pattern) => matches(pattern, path))) return undefined;
     const selectedHere = inherited || (path && includes.some((pattern) => matches(pattern, path)));

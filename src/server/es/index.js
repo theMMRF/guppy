@@ -127,7 +127,7 @@ class ES {
       const end = Date.now();
       const durationInMS = end - start;
 
-      log.info(`[ES.query] DurationInMS:${durationInMS}. index, type, query body: `, esIndex, esType, JSON.stringify(validatedQueryBody));
+      log.info(`[ES.query] DurationInMS:${durationInMS}. index, type, query body: `, esIndex, esType, JSON.stringify(queryBody));
     });
   }
 
@@ -163,8 +163,9 @@ class ES {
       );
     }
     const layout = config.fileVisibilityEnabled ? await this._visibilityLayout(esIndex) : { indices: esIndex, indexer: this.paths?.[esIndex] };
-    const validatedQueryBody = applyFileVisibility({ ...(filter ? { query: filter } : {}), ...(config.fileVisibilityEnabled && sort ? { sort } : {}) }, layout.indexer);
-    log.debug('[ES.scrollQuery] scroll query body: ', JSON.stringify(validatedQueryBody, null, 4));
+    const queryBody = { ...(filter ? { query: filter } : {}), ...(config.fileVisibilityEnabled && sort ? { sort } : {}) };
+    const validatedQueryBody = applyFileVisibility(queryBody, layout.indexer);
+    log.debug('[ES.scrollQuery] scroll query body: ', JSON.stringify(queryBody, null, 4));
 
     let currentBatch;
     let scrollID;
