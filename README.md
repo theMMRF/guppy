@@ -131,3 +131,14 @@ The `/_version` endpoint yields version and commit information. This endpoint is
 ```
 {"version":"<version-string>","commit":"<commit-hash>"}
 ```
+
+## MMRF image publishing
+
+MMRF preview/deployment images are built by the separately configured AWS
+CodePipeline/CodeBuild integration. GitHub Actions does not publish this fork's
+images to Quay or to the upstream CTDS registry. Opening a standard source PR
+continues to use the external preview-build integration; it does not deploy it.
+
+The inherited CTDS image-publishing job has been removed. Existing GitHub
+repository secrets are not deleted by this change; verify other consumers before
+removing obsolete credentials. Other CI checks remain as configured.
