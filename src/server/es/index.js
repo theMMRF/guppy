@@ -15,6 +15,16 @@ import {
 import { ElasticsearchFieldIndexer } from './fieldResolver';
 import { QueryCache } from './queryCache';
 
+// Policy fields stay in the raw mappings used by ownership checks, but never
+// become public GraphQL fields or field-discovery entries.
+const publicProperties = (properties) => Object.fromEntries(
+  Object.entries(properties)
+    .filter(([name]) => !name.startsWith('_gen3_file_'))
+    .map(([name, definition]) => [name, definition.properties
+      ? { ...definition, properties: publicProperties(definition.properties) }
+      : definition]),
+);
+
 function processArrayConfig(arrayConfig, fieldTypes) {
   const arrayFields = {};
 
@@ -259,7 +269,7 @@ class ES {
     const resultList = await Promise.all(promiseList);
     log.info('[ES.initialize] got mapping from elasticsearch');
     resultList.forEach((res) => {
-      fieldTypes[res.index] = Object.entries(res.fieldTypes).reduce((acc, [key, item]) => {
+      fieldTypes[res.index] = Object.entries(publicProperties(res.fieldTypes)).reduce((acc, [key, item]) => {
         if (item.properties) {
           if (item.type === 'nested') {
             acc[key] = item;
