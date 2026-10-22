@@ -32,6 +32,7 @@ integration('project-owned file visibility on real Elasticsearch 7', () => {
     await es.client.bulk({ refresh: true, body: docs.flatMap((doc) => [{ index: { _index: index } }, doc]) });
     await es.client.index({ index: cases, id: 'case-1', refresh: true, body: {
       case_id: 'case-1', diagnosis: 'myeloma', _gen3_file_visibility_version: 1,
+      unrequested_payload: 'x'.repeat(1024 * 1024),
       files: [{ file_id: 'public', file_name: 'rna.txt', _gen3_file_authz: [open] }, { file_id: 'secret', file_name: 'methylation.txt', _gen3_file_authz: [a] }],
       summary: { file_count: 2, file_size: 109 },
       _gen3_file_summary: [{ authz: [open], file_count: 1, file_size: 9, data_category: ['RNA'], experimental_strategy: [], case_ids: ['case-1'] }, { authz: [a], file_count: 1, file_size: 100, data_category: ['methylation'], experimental_strategy: [], case_ids: ['case-1'] }],
@@ -63,6 +64,35 @@ integration('project-owned file visibility on real Elasticsearch 7', () => {
       expect(result.hits.hits[0]._source).toEqual({ case_id: 'case-1', diagnosis: 'myeloma', files: [{ file_name: 'rna.txt' }], summary: { file_count: 1, file_size: 9 } });
       expect(JSON.stringify(result)).not.toContain('methylation');
       expect(JSON.stringify(result)).not.toContain('_gen3_file_');
+    });
+  });
+  test('clinical searches, top-level counts and exports keep the ES response bounded', async () => {
+    const search = jest.spyOn(es.client, 'search');
+    try {
+      await visibilityContext.run({ resources: [open] }, async () => {
+        const result = await es.query(cases, 'case', { size: 10000, _source: ['case_id', 'diagnosis'] });
+        expect(result.hits.hits[0]._source).toEqual({ case_id: 'case-1', diagnosis: 'myeloma' });
+        const raw = (await search.mock.results[search.mock.results.length - 1].value).body;
+        expect(JSON.stringify(raw).length).toBeLessThan(2048);
+        expect(search.mock.calls[search.mock.calls.length - 1][0].body._source).toEqual(['case_id', 'diagnosis', '_gen3_file_authz']);
+        await es.query(cases, 'case', { size: 1, _source: false });
+        expect((await search.mock.results[search.mock.results.length - 1].value).body.hits.hits[0]._source).toBeUndefined();
+        es.getESFields.mockReturnValueOnce({ fields: [{ name: 'case_id' }, { name: 'diagnosis' }] });
+        expect(await es.scrollQuery(cases, 'case', { fields: ['case_id', 'diagnosis'] })).toEqual([{ case_id: 'case-1', diagnosis: 'myeloma' }]);
+        const request = search.mock.calls[search.mock.calls.length - 1][0];
+        expect(request.body._source).toEqual(['case_id', 'diagnosis', '_gen3_file_authz']);
+        expect(request._source).toBeUndefined();
+        expect(JSON.stringify((await search.mock.results[search.mock.results.length - 1].value).body).length).toBeLessThan(2048);
+      });
+    } finally {
+      search.mockRestore();
+    }
+  });
+  test('source exclusions and wildcards cannot strip correlated ownership before redaction', async () => {
+    await visibilityContext.run({ resources: [open] }, async () => {
+      const result = await es.query(cases, 'case', { _source: { includes: ['fi*.file_name', 'summary.file_count'], excludes: ['*_gen3_file_authz'] } });
+      expect(result.hits.hits[0]._source).toEqual({ files: [{ file_name: 'rna.txt' }], summary: { file_count: 1 } });
+      expect(JSON.stringify(result)).not.toContain('methylation');
     });
   });
   test('hidden embedded files cannot match filters, facets, counts or top hits', async () => {

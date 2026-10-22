@@ -1,4 +1,4 @@
-import { applyFileVisibility as applyPolicy, visibilityResources, visibilityContext, redactFileSource, redactFileResponse, protectedFilePaths } from '../fileVisibility';
+import { applyFileVisibility as applyPolicy, visibilityResources, visibilityContext, redactFileSource, redactFileResponse, protectedFilePaths, visibilitySource } from '../fileVisibility';
 import config from '../../config';
 
 import { ElasticsearchFieldIndexer } from '../../es/fieldResolver';
@@ -32,6 +32,23 @@ test('policy wraps query before cache, projections and aggregation', () => {
 test('missing request context cannot grant restricted access', () => {
   const result = applyFileVisibility({});
   expect(result.query.bool.filter[1].bool.filter[1].bool.should[1].bool.filter[1].script.script.params.allowed).toEqual({});
+});
+
+test('clinical and count queries never expand to complete case documents', () => {
+  const fields = ['case_id', 'submitter_id', 'project.project_id', 'demographic.days_to_death', 'demographic.vital_status', 'diagnoses.days_to_last_follow_up'];
+  expect(applyFileVisibility({ size: 10000, _source: fields })._source).toEqual([...fields, '_gen3_file_authz']);
+  expect(applyFileVisibility({ size: 0, _source: false })._source).toBe(false);
+  expect(fields).toHaveLength(6);
+});
+
+test.each(['files.file_name', 'files', 'fi*.file_name', 'files.?ile_name'])('selection %s retains sibling ownership despite caller exclusions', (field) => {
+  const source = visibilitySource({ includes: [field], excludes: ['*_gen3_file_authz'] }, new Map([['files', 'files._gen3_file_authz'], ['other', 'other._gen3_file_authz']]));
+  expect(source).toContain('files._gen3_file_authz');
+  expect(source).not.toContain('other._gen3_file_authz');
+});
+
+test('selected summaries retain sidecars for visible-only totals', () => {
+  expect(applyFileVisibility({ _source: ['summary.file_count'] })._source).toContain('*_gen3_file_summary');
 });
 
 test('concurrent users get distinct query and cache inputs', async () => {

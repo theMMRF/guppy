@@ -120,6 +120,33 @@ const checkQuery = (value, paths, key = '') => {
 };
 
 const filtered = (query, guard) => ({ bool: { filter: [query || { match_all: {} }, guard] } });
+
+// Keep clinical projections small. Fetch sibling ownership only for containers
+// that the caller could select, then apply the original excludes after redaction
+// so an exclusion cannot remove the ACL needed to hide a private child.
+export const visibilitySource = (selection, paths) => {
+  if (selection === undefined || selection === true || selection === false) return selection;
+  const filters = typeof selection === 'object' && !Array.isArray(selection) ? selection : { includes: [].concat(selection) };
+  const includes = [].concat(filters.includes || filters.include || ['*']);
+  const overlaps = (pattern, path) => {
+    const wildcard = pattern.search(/[*?]/);
+    if (wildcard >= 0) {
+      const prefix = pattern.slice(0, wildcard);
+      return path.startsWith(prefix) || prefix.startsWith(`${path}.`);
+    }
+    return pattern === path || pattern.startsWith(`${path}.`) || path.startsWith(`${pattern}.`);
+  };
+  const required = [FILE_AUTHZ];
+  paths.forEach((field, path) => {
+    if (includes.some((pattern) => overlaps(pattern, path))) required.push(field);
+  });
+  // Summary sidecars are disabled objects and may occur at any ancestor level.
+  // Wildcard selections conservatively retain them for summary recomputation.
+  if (includes.some((pattern) => /[*?]|(?:^|\.)summary(?:\.|$)/.test(pattern))) {
+    required.push('*_gen3_file_summary', '*summary.case_count');
+  }
+  return [...new Set([...includes, ...required])];
+};
 const rewriteQuery = (value, paths, resources) => {
   if (Array.isArray(value)) return value.map((item) => rewriteQuery(item, paths, resources));
   if (!value || typeof value !== 'object') return value;
@@ -174,7 +201,7 @@ export const applyFileVisibility = (body, indexer) => {
     throw new CodedError(400, 'Aggregations cannot bypass file visibility');
   }
   const resources = visibilityContext.getStore()?.resources || [];
-  const result = { ...body, _source: true,
+  const result = { ...body, _source: visibilitySource(body._source, paths),
     query: filtered(rewriteQuery(body.query, paths, resources), visibilityQuery(resources)),
   };
   if (body.post_filter) result.post_filter = rewriteQuery(body.post_filter, paths, resources);

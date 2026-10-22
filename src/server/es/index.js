@@ -163,7 +163,7 @@ class ES {
       );
     }
     const layout = config.fileVisibilityEnabled ? await this._visibilityLayout(esIndex) : { indices: esIndex, indexer: this.paths?.[esIndex] };
-    const queryBody = { ...(filter ? { query: filter } : {}), ...(config.fileVisibilityEnabled && sort ? { sort } : {}) };
+    const queryBody = { ...(filter ? { query: filter } : {}), ...(config.fileVisibilityEnabled ? { _source: fields, ...(sort ? { sort } : {}) } : {}) };
     const validatedQueryBody = applyFileVisibility(queryBody, layout.indexer);
     log.debug('[ES.scrollQuery] scroll query body: ', JSON.stringify(queryBody, null, 4));
 
@@ -184,7 +184,7 @@ class ES {
           body: validatedQueryBody,
           scroll: '1m',
           size: SCROLL_PAGE_SIZE,
-          _source: config.fileVisibilityEnabled ? true : fields,
+          _source: config.fileVisibilityEnabled ? undefined : fields,
           sort: config.fileVisibilityEnabled ? undefined : sortStringList,
         }).then((resp) => resp, (err) => {
           log.error('[ES.query] error when query', err.message);
