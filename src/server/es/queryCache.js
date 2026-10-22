@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 const DEFAULT_NOW = () => Date.now();
 
 export const stableStringify = (value) => {
@@ -107,7 +109,8 @@ export class QueryCache {
       return;
     }
     const suffix = reason ? ` reason:${reason}` : '';
-    this.logger.debug(`[ES.queryCache] ${event}${suffix}. key:${key}`);
+    const digest = createHash('sha256').update(key).digest('hex');
+    this.logger.debug(`[ES.queryCache] ${event}${suffix}. key:${digest}`);
   }
 }
 

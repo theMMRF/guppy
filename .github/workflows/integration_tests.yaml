@@ -4,6 +4,7 @@ on: pull_request
 
 jobs:
   integration_tests:
+    if: github.repository_owner == 'uc-cdis' || (github.ref_name != 'feature/selective-file-visibility' && github.head_ref != 'feature/selective-file-visibility')
     name: Integration tests
     uses: uc-cdis/.github/.github/workflows/integration_tests.yaml@master
     with:

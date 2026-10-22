@@ -9,6 +9,8 @@ import {
 } from './utils';
 import config from '../config';
 import requireMetadataAccess from './metadataAccess';
+import arboristClient from './arboristClient';
+import { visibilityContext, visibilityResources } from './fileVisibility';
 
 export class AuthHelper {
   constructor(jwt) {
@@ -16,6 +18,12 @@ export class AuthHelper {
   }
 
   async initialize() {
+    if (config.fileVisibilityEnabled) {
+      const mapping = await arboristClient.listAuthMapping(this._jwt);
+      this._visibilityResources = visibilityResources(mapping);
+      const scope = visibilityContext.getStore();
+      if (scope) scope.resources = this._visibilityResources;
+    }
     if (config.metadataAuthResource) {
       await requireMetadataAccess(this._jwt);
       this._metadataAuthorized = true;
