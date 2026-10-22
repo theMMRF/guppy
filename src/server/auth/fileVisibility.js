@@ -119,7 +119,9 @@ const checkQuery = (value, paths, key = '') => {
   });
 };
 
-const filtered = (query, guard) => ({ bool: { filter: [query || { match_all: {} }, guard] } });
+// Preserve caller scores used for genomic frequency counts and ranking. Only
+// authorization belongs in filter context.
+const filtered = (query, guard) => ({ bool: { must: [query || { match_all: {} }], filter: [guard] } });
 
 // Keep clinical projections small. Fetch sibling ownership only for containers
 // that the caller could select, then apply the original excludes after redaction

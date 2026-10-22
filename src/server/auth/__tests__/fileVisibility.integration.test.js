@@ -136,4 +136,28 @@ integration('project-owned file visibility on real Elasticsearch 7', () => {
       }));
     });
   });
+  test('visibility preserves caller scores and frequency ranking', async () => {
+    await visibilityContext.run({ resources: [open, a, b] }, async () => {
+      const result = await es.query(index, 'file', {
+        _source: ['file_id'],
+        track_scores: true,
+        query: { bool: { should: [
+          { constant_score: { filter: { term: { category: 'public' } }, boost: 7 } },
+          { constant_score: { filter: { term: { category: 'secret' } }, boost: 3 } },
+        ], minimum_should_match: 1 } },
+      });
+      expect(result.hits.hits[0]._source.file_id).toBe('public');
+      expect(result.hits.hits.map((hit) => hit._score)).toEqual([7, 3, 3]);
+      expect(result.hits.hits).toHaveLength(3);
+    });
+  });
+  test.each([[[open], 1], [[open, a], 2]])('nested scores count only readable files for %j', async (resources, expected) => {
+    await visibilityContext.run({ resources }, async () => {
+      const result = await es.query(cases, 'case', {
+        _source: ['case_id'],
+        query: { nested: { path: 'files', score_mode: 'sum', query: { match_all: {} } } },
+      });
+      expect(result.hits.hits[0]._score).toBe(expected);
+    });
+  });
 });

@@ -23,15 +23,15 @@ test('uses independent IndexD metadata actions including wildcards', () => {
 test('policy wraps query before cache, projections and aggregation', () => {
   const body = { query: { term: { file_id: 'secret' } }, _source: ['file_name'], aggs: { total: { value_count: { field: 'file_id' } } } };
   const result = visibilityContext.run({ resources: [resource] }, () => applyFileVisibility(body));
-  expect(result.query.bool.filter[0]).toEqual(body.query);
-  expect(result.query.bool.filter[1].bool.filter[1].bool.should[1].bool.filter[1].script.script.params.allowed).toEqual({ [resource]: true });
+  expect(result.query.bool.must[0]).toEqual(body.query);
+  expect(result.query.bool.filter[0].bool.filter[1].bool.should[1].bool.filter[1].script.script.params.allowed).toEqual({ [resource]: true });
   expect(body.query).toEqual({ term: { file_id: 'secret' } });
   expect(result.aggs).toEqual(body.aggs);
 });
 
 test('missing request context cannot grant restricted access', () => {
   const result = applyFileVisibility({});
-  expect(result.query.bool.filter[1].bool.filter[1].bool.should[1].bool.filter[1].script.script.params.allowed).toEqual({});
+  expect(result.query.bool.filter[0].bool.filter[1].bool.should[1].bool.filter[1].script.script.params.allowed).toEqual({});
 });
 
 test('clinical and count queries never expand to complete case documents', () => {
@@ -62,7 +62,7 @@ test('concurrent users get distinct query and cache inputs', async () => {
 test('global facets retain their contract with filtered children and counts', () => {
   const result = applyFileVisibility({ aggs: { all: { global: {}, aggs: { names: { terms: { field: 'file_name' } } } } } });
   expect(result.aggs.all.global).toEqual({});
-  expect(result.aggs.all.aggs.__gen3_visible_files.filter).toEqual(result.query.bool.filter[1]);
+  expect(result.aggs.all.aggs.__gen3_visible_files.filter).toEqual(result.query.bool.filter[0]);
   expect(result.aggs.all.aggs.__gen3_visible_files.aggs.names).toEqual({ terms: { field: 'file_name' } });
 });
 
@@ -119,7 +119,7 @@ test('shared clinical case preserves its visible files and recomputes summaries'
 test('nested file query and facets enforce the same scopes', () => {
   const body = { query: { nested: { path: 'files', query: { term: { 'files.file_name': 'secret' } } } }, aggs: { files: { nested: { path: 'files' }, aggs: { names: { terms: { field: 'files.file_name' } } } } } };
   const result = visibilityContext.run({ resources: [resource] }, () => applyFileVisibility(body));
-  expect(result.query.bool.filter[0].nested.query.bool.filter[1].bool.filter[1].script.script.params.field).toBe('files._gen3_file_authz');
+  expect(result.query.bool.must[0].nested.query.bool.filter[0].bool.filter[1].script.script.params.field).toBe('files._gen3_file_authz');
   expect(result.aggs.files.aggs.__gen3_visible_files.filter.bool.filter[1].script.script.params.allowed).toEqual({ [resource]: true });
   const response = visibilityContext.run({ resources: [resource] }, () => redactFileResponse({ aggregations: { files: { doc_count: 2, __gen3_visible_files: { doc_count: 1, names: { buckets: [{ key: 'rna', doc_count: 1 }] } } } } }));
   expect(response.aggregations.files.doc_count).toBe(1);
